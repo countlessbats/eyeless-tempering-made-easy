@@ -2,17 +2,28 @@
 
 A tiny Pillars of Eternity 1 data patch for The White March Part II finale.
 
-It makes the tempered Abydon dialogue option much easier to access by changing the Abydon finale
-conversation requirement from:
+It makes the tempered ("Moderated") Abydon ending — the player line *"Then return to Abydon with
+perspective as well as memory..."* — **always available, regardless of how many Eyeless arguments
+you win.**
 
-`n_abydon_arguments_won == 3`
+## How it actually works (traced through the conversation flow)
 
-to:
+- Node **145** ("Debate begins here") is the debate hub, and it links **directly** to node **250**
+  — the tempering line (which leads to the tempered response, node 288).
+- Node **250** is normally hidden behind `HasConversationNodeBeenPlayed(320)`: it appears only
+  after node **320** fires. Node 320 is reached only by fully winning a debate topic
+  (`n_abydon_argument_danger/stuck/burden == 2`) and, vanilla, all three
+  (`n_abydon_arguments_won == 3`).
 
-`n_abydon_arguments_won == 0`
+So the option is gated on a chain you can miss entirely. An `EqualTo` check can never mean "any
+number," and even a satisfied count still requires *reaching* node 320 — which is why the old
+"change `3 → 0`" edit didn't reliably work. Instead, this patch **removes node 250's own
+`HasConversationNodeBeenPlayed(320)` condition**, so the tempering line is offered at the debate
+hub immediately, regardless of arguments. Nothing else is changed — the debate and its counters
+behave exactly as vanilla.
 
-This follows the approach discussed in the Obsidian forum thread:
-https://forums.obsidian.net/topic/90887-quick-tutorial-how-to-change-the-wm2-ending/
+(Background thread, for context only — its `3 → 0` suggestion is the fragile approach this patch
+replaces: https://forums.obsidian.net/topic/90887-quick-tutorial-how-to-change-the-wm2-ending/ )
 
 ## Installation
 

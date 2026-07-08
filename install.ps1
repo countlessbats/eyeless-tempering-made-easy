@@ -3,11 +3,15 @@
     Installs or uninstalls Eyeless Tempering Made Easy.
 
 .DESCRIPTION
-    Patches the White March Part II Abydon finale conversation so the tempered Abydon dialogue
-    option is available without winning three Eyeless arguments.
+    Patches the White March Part II Abydon finale conversation so the tempered ("Moderated")
+    Abydon ending is ALWAYS available, regardless of how many Eyeless arguments you win.
 
     This is a data-file patch, not a sidecar DLL. It backs up the original conversation file once,
-    then changes only the finale branch's n_abydon_arguments_won threshold from 3 to 0.
+    then removes the condition on node 250 (the tempering player line) that hides it until node 320
+    has fired. With that condition gone, the line is offered at the debate hub (node 145)
+    immediately, regardless of how the debate goes. The vanilla gate can never be retuned to mean
+    "always" - it requires reaching node 320, which needs fully winning debate topics - so the
+    condition is removed rather than adjusted.
 
 .PARAMETER GameDir
     Path to the Pillars of Eternity install directory. If omitted, common Steam locations are
@@ -171,25 +175,40 @@ function Install-Patch([string]$conversationPath) {
     }
 
     $text = Get-Text $conversationPath
-    if ($text -match '<string>n_abydon_arguments_won</string>\s*<string>EqualTo</string>\s*<string>0</string>\s*</Parameters>\s*</Data>\s*<Not>false</Not>') {
-        Write-Host "Already patched: tempered Abydon option is already made easy." -ForegroundColor Yellow
+
+    # Mechanism (traced through the actual .conversation flow, not the forum thread):
+    #   * Node 145 ("Debate begins here") is the debate hub and links DIRECTLY to node 250 - the
+    #     player line "Then return to Abydon with perspective as well as memory..." (the tempered
+    #     "Moderated" ending, which leads to node 288).
+    #   * Node 250 is hidden behind HasConversationNodeBeenPlayed(320): it appears only after node
+    #     320 has fired. Node 320 is reached only by fully winning a debate topic
+    #     (n_abydon_argument_danger/stuck/burden == 2) and, vanilla, all three
+    #     (n_abydon_arguments_won == 3). So retuning the argument count can't ever mean "always"
+    #     (an EqualTo matches one exact value), and it still requires reaching node 320 at all -
+    #     which is why the old "3 -> 0" edit didn't reliably work.
+    # Fix: remove node 250's HasConversationNodeBeenPlayed(320) condition, so the tempering line is
+    # offered at the debate hub immediately, regardless of any arguments. Nothing else is touched;
+    # the debate and its counters still work exactly as vanilla.
+    $gate = 'HasConversationNodeBeenPlayed\(String, Int32\)</FullName>\s*<Parameters>\s*<string>[^<]*px2_04_cv_abydon_finale\.conversation</string>\s*<string>320</string>'
+    if (-not [regex]::IsMatch($text, $gate)) {
+        Write-Host "Already patched: the tempering line (node 250) is unconditional." -ForegroundColor Yellow
         return
     }
 
-    $pattern = '(<string>n_abydon_arguments_won</string>\s*<string>EqualTo</string>\s*)<string>3</string>(\s*</Parameters>\s*</Data>\s*<Not>false</Not>\s*<Operator>And</Operator>)'
+    $pattern = '<Components>\s*<ExpressionComponent[^>]*>\s*<Data>\s*<FullName>Boolean HasConversationNodeBeenPlayed\(String, Int32\)</FullName>\s*<Parameters>\s*<string>[^<]*px2_04_cv_abydon_finale\.conversation</string>\s*<string>320</string>\s*</Parameters>\s*</Data>\s*<Not>false</Not>\s*<Operator>And</Operator>\s*</ExpressionComponent>\s*</Components>'
     $matches = [regex]::Matches($text, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
     if ($matches.Count -ne 1) {
-        throw "Expected to find exactly one tempered Abydon requirement, but found $($matches.Count). Refusing to guess."
+        throw "Expected exactly one node-320 gate on the tempering line (node 250), but found $($matches.Count). Refusing to guess."
     }
 
     $patched = [regex]::Replace(
         $text,
         $pattern,
-        '$1<string>0</string>$2',
+        '<Components />',
         [System.Text.RegularExpressions.RegexOptions]::Singleline
     )
     Set-Text $conversationPath $patched
-    Write-Host "Patched Abydon finale: required Eyeless arguments 3 -> 0." -ForegroundColor Green
+    Write-Host "Patched Abydon finale: tempering line (node 250) now always available at the debate hub." -ForegroundColor Green
 }
 
 function Uninstall-Patch([string]$conversationPath) {
